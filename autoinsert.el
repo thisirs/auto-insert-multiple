@@ -1,4 +1,4 @@
-;;; auto-insert.el --- automatic mode-dependent insertion of text into new files
+;;; autoinsert.el --- automatic mode-dependent insertion of text into new files
 
 ;; Copyright (C) 1985-1987, 1994-1995, 1998, 2000-2012
 ;;   Free Software Foundation, Inc.
