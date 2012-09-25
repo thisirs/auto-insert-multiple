@@ -345,6 +345,7 @@ Matches the visited file name against the elements of `auto-insert-alist'."
 ;; Helper functions
 (defun auto-insert-yasnippet (key)
   (save-window-excursion
+    (require 'yasnippet)
     ;; make buffer visible before yasnippet
     ;; which might ask the user for something
     (switch-to-buffer (current-buffer))
