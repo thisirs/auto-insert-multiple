@@ -350,10 +350,10 @@ Matches the visited file name against the elements of `auto-insert-alist'."
       ;; make buffer visible before yasnippet
       ;; which might ask the user for something
       (switch-to-buffer (current-buffer))
-      (yas/expand-snippet
-       (yas/template-content (cdar (mapcan #'(lambda (table)
-                                               (yas/fetch table key))
-                                           (yas/get-snippet-tables))))))))
+      (yas-expand-snippet
+       (yas--template-content (cdar (mapcan #'(lambda (table)
+                                               (yas--fetch table key))
+                                           (yas--get-snippet-tables))))))))
 
 (defun auto-insert-skeleton (skeleton)
   (save-window-excursion
