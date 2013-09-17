@@ -294,6 +294,8 @@ Matches the visited file name against the elements of `auto-insert-alist'."
   (and (not buffer-read-only)
        (or (eq this-command 'auto-insert)
            (and auto-insert
+                (and (buffer-file-name)
+                     (not (file-exists-p (buffer-file-name))))
                 (bobp) (eobp)))
        (let ((alist auto-insert-alist)
              case-fold-search candidates cond action)
