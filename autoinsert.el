@@ -276,6 +276,12 @@ file-name or one relative to `auto-insert-directory' or a form to evaluate."
   :type 'sexp
   :group 'auto-insert)
 
+(defvar auto-insert-local-alist nil
+  "Like `auto-insert-alist' but buffer-local.")
+(make-variable-buffer-local 'auto-insert-local-alist)
+
+(defvar auto-insert-merge t
+  "If non-nil, merge local templates with global ones.")
 
 ;; Establish a default value for auto-insert-directory
 (defcustom auto-insert-directory "~/insert/"
@@ -285,11 +291,31 @@ thus, on a GNU or Unix system, it must end in a slash."
   :type 'directory
   :group 'auto-insert)
 
+(defun auto-insert-filter (candidates)
+  "Filter the alist of CANDIDATES according to current major mode
+and buffer filename."
+  (let (condition filtered-candidates)
+    (while candidates
+      (setq condition (car (car candidates)))
+      (if (if (symbolp condition)
+              (eq condition major-mode)
+            (and buffer-file-name
+                 (string-match condition buffer-file-name)))
+          (setq filtered-candidates
+                (append filtered-candidates
+                        (cond
+                         ((stringp (car (cdr (car candidates))))
+                          (list (cdr (car candidates))))
+                         ((listp (car (cdr (car candidates))))
+                          (cdr (car candidates)))))))
+      (setq candidates (cdr candidates)))
+    filtered-candidates))
 
 ;;;###autoload
 (defun auto-insert ()
   "Insert default contents into new files if variable `auto-insert' is non-nil.
-Matches the visited file name against the elements of `auto-insert-alist'."
+Matches the visited file name against the elements of
+`auto-insert-alist' and `auto-insert-local-alist' if local."
   (interactive)
   (and (not buffer-read-only)
        (or (eq this-command 'auto-insert)
@@ -297,24 +323,19 @@ Matches the visited file name against the elements of `auto-insert-alist'."
                 (and (buffer-file-name)
                      (not (file-exists-p (buffer-file-name))))
                 (bobp) (eobp)))
-       (let ((alist auto-insert-alist)
-             case-fold-search candidates cond action)
-         (goto-char 1)
-         ;; find all matching alist entry
-         (while alist
-           (setq cond (car (car alist)))
-           (if (if (symbolp cond)
-                   (eq cond major-mode)
-                 (and buffer-file-name
-                      (string-match cond buffer-file-name)))
-               (setq candidates
-                     (append candidates
-                             (cond
-                              ((stringp (car (cdr (car alist))))
-                               (list (cdr (car alist))))
-                              ((listp (car (cdr (car alist))))
-                               (cdr (car alist)))))))
-           (setq alist (cdr alist)))
+       (let (case-fold-search candidates cand-local cand-global action)
+         (goto-char (point-min))
+
+         ;; find global and local templates
+         (setq cand-global (auto-insert-filter auto-insert-alist))
+         (if (local-variable-p 'auto-insert-local-alist)
+             (setq cand-local (auto-insert-filter auto-insert-local-alist)))
+
+         ;; merge them according to `auto-insert-merge'
+         (setq candidates
+               (if auto-insert-merge
+                   (append cand-local cand-global)
+                 (or cand-local cand-global)))
 
          (and candidates
               (if (cdr candidates)
