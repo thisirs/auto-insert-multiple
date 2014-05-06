@@ -284,7 +284,7 @@ file-name or one relative to `auto-insert-directory' or a form to evaluate."
   "If non-nil, merge local templates with global ones.")
 
 ;; Establish a default value for auto-insert-directory
-(defcustom auto-insert-directory "~/insert/"
+(defcustom auto-insert-directory (expand-file-name "insert" user-emacs-directory)
   "Directory from which auto-inserted files are taken.
 The value must be an absolute directory name;
 thus, on a GNU or Unix system, it must end in a slash."
