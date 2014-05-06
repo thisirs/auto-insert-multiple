@@ -366,17 +366,30 @@ Matches the visited file name against the elements of
   nil)
 
 ;; Helper functions
-(defun auto-insert-yasnippet (key)
+(defun auto-insert-yasnippet-expand (snippet)
+  "Expand yasnippet's SNIPPET in current buffer."
   (with-demoted-errors
-    (save-window-excursion
-      (require 'yasnippet)
-      ;; make buffer visible before yasnippet
-      ;; which might ask the user for something
-      (switch-to-buffer (current-buffer))
-      (yas-expand-snippet
-       (yas--template-content (cdar (mapcan #'(lambda (table)
-                                               (yas--fetch table key))
-                                           (yas--get-snippet-tables))))))))
+      (save-window-excursion
+        (require 'yasnippet)
+        ;; make buffer visible before yasnippet
+        ;; which might ask the user for something
+        (switch-to-buffer (current-buffer))
+        (yas-expand-snippet snippet))))
+
+(defmacro auto-insert-yasnippet (mode key &rest body)
+  "Expand to a list of templates constructed from yasnippet in
+mode MODE for key KEY."
+  (or (mapcar
+       (lambda (template)
+         (list (car template)
+               `(progn
+                  (auto-insert-yasnippet-expand ,(yas--template-content (cdr template)))
+                  ,@body)))
+       (mapcan #'(lambda (table)
+                   (yas--fetch table key))
+               (let ((major-mode mode))
+                 (yas--get-snippet-tables))))
+      (error "No snippet with key \"%s\" in mode %s" key mode)))
 
 (defun auto-insert-skeleton (skeleton)
   (save-window-excursion
