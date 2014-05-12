@@ -379,6 +379,11 @@ Matches the visited file name against the elements of
 (defmacro auto-insert-yasnippet (mode key &rest body)
   "Expand to a list of templates constructed from yasnippet in
 mode MODE for key KEY."
+  (require 'yasnippet)
+  (mapc (lambda (dir) (yas--load-directory-1
+                       (expand-file-name (symbol-name mode) dir)
+                       mode))
+        (yas-snippet-dirs))
   (or (mapcar
        (lambda (template)
          (list (car template)
