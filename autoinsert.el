@@ -404,11 +404,9 @@ mode MODE for key KEY."
     (skeleton-insert skeleton)))
 
 (defun auto-insert-raw (filename)
-  (if (file-readable-p
-       (setq filename (expand-file-name
-                       filename auto-insert-directory)))
-      (insert-file-contents action)))
-
+  (setq filename (expand-file-name filename auto-insert-directory))
+  (if (file-readable-p filename)
+      (insert-file-contents filename)))
 
 (defun auto-insert-convert (auto-insert-alist)
   "Convert your old `auto-insert-alist'"
