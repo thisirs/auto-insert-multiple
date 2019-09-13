@@ -91,6 +91,7 @@ If this contains a %s, that will be replaced by the matching rule."
   :group 'auto-insert)
 
 
+;;;###autoload
 (defcustom auto-insert-alist
   '((("\\.\\([Hh]\\|hh\\|hpp\\|hxx\\|h\\+\\+\\)\\'" . "C / C++ header")
      (replace-regexp-in-string
