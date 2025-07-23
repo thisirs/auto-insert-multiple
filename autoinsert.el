@@ -1,7 +1,6 @@
-;;; autoinsert.el --- automatic mode-dependent insertion of text into new files
+;;; autoinsert.el --- automatic mode-dependent insertion of text into new files  -*- lexical-binding: t -*-
 
-;; Copyright (C) 1985-1987, 1994-1995, 1998, 2000-2018 Free Software
-;; Foundation, Inc.
+;; Copyright (C) 1985-2025 Free Software Foundation, Inc.
 
 ;; Author: Charlie Martin <crm@cs.duke.edu>
 ;; Adapted-By: Daniel Pfeiffer <occitan@esperanto.org>
@@ -32,13 +31,13 @@
 ;;  default text much as the mode is automatically set using
 ;;  auto-mode-alist.
 ;;
-;;  To use:
-;;     (add-hook 'find-file-hook 'auto-insert)
-;;     setq auto-insert-directory to an appropriate slash-terminated value
+;; To use, add this to your Init file:
+;;
+;;     (auto-insert-mode t)
+;;     (setq auto-insert-directory "~/some-dir")
 ;;
 ;;  You can also customize the variable `auto-insert-mode' to load the
-;;  package.  Alternatively, add the following to your init file:
-;;  (auto-insert-mode 1)
+;; package.
 ;;
 ;;  Author:  Charlie Martin
 ;;           Department of Computer Science and
@@ -46,9 +45,11 @@
 ;;           Box 3709
 ;;           Duke University Medical Center
 ;;           Durham, NC 27710
-;;	      (crm@cs.duke.edu,mcnc!duke!crm)
+;;            (crm@cs.duke.edu,mcnc!duke!crm)
 
 ;;; Code:
+
+(require 'seq)
 
 (defgroup auto-insert nil
   "Automatic mode-dependent insertion of text into new files."
@@ -61,43 +62,44 @@
 (defcustom auto-insert 'not-modified
   "Controls automatic insertion into newly found empty files.
 Possible values:
-	nil	do nothing
-	t	insert if possible
-	other	insert if possible, but mark as unmodified.
+        nil     do nothing
+        t       insert if possible
+        other   insert if possible, but mark as unmodified.
 Insertion is possible when something appropriate is found in
 `auto-insert-alist'.  When the insertion is marked as unmodified, you can
-save it with  \\[write-file] RET.
+save it with  \\[write-file] \\`RET'.
 This variable is used when the function `auto-insert' is called, e.g.
 when you do (add-hook \\='find-file-hook \\='auto-insert).
 With \\[auto-insert], this is always treated as if it were t."
   :type '(choice (const :tag "Insert if possible" t)
                  (const :tag "Do nothing" nil)
                  (other :tag "insert if possible, mark as unmodified."
-                        not-modified))
-  :group 'auto-insert)
+                        not-modified)))
+
+;;;###autoload
+(put 'auto-insert 'safe-local-variable #'null)
 
 (defcustom auto-insert-query 'function
   "Non-nil means ask user before auto-inserting.
 When this is `function', only ask when called non-interactively."
   :type '(choice (const :tag "Don't ask" nil)
                  (const :tag "Ask if called non-interactively" function)
-                 (other :tag "Ask" t))
-  :group 'auto-insert)
+                 (other :tag "Ask" t)))
 
 (defcustom auto-insert-prompt "Perform %s auto-insertion? "
-  "Prompt to use when querying whether to auto-insert.
+  "Prompt to use when querying whether to `auto-insert'.
 If this contains a %s, that will be replaced by the matching rule."
   :type 'string
-  :group 'auto-insert)
+  :version "28.1")
 
+(declare-function sgml-tag "textmodes/sgml-mode" (&optional str arg))
 
-;;;###autoload
 (defcustom auto-insert-alist
-  '((("\\.\\([Hh]\\|hh\\|hpp\\|hxx\\|h\\+\\+\\)\\'" . "C / C++ header")
+  `((("\\.\\([Hh]\\|hh\\|hpp\\|hxx\\|h\\+\\+\\)\\'" . "C / C++ header")
      (replace-regexp-in-string
       "[^A-Z0-9]" "_"
-      (replace-regexp-in-string
-       "\\+" "P"
+      (string-replace
+       "+" "P"
        (upcase (file-name-nondirectory buffer-file-name))))
      "#ifndef " str \n
      "#define " str "\n\n"
@@ -115,7 +117,7 @@ If this contains a %s, that will be replaced by the matching rule."
 
     (("[Mm]akefile\\'" . "Makefile") . "makefile.inc")
 
-    (html-mode . (lambda () (sgml-tag "html")))
+    (html-mode . ,(lambda () (sgml-tag "html")))
 
     (plain-tex-mode . "tex-insert.tex")
     (bibtex-mode . "tex-insert.tex")
@@ -130,11 +132,11 @@ If this contains a %s, that will be replaced by the matching rule."
      "\n\\end{document}")
 
     (("/bin/.*[^/]\\'" . "Shell-Script mode magic number") .
-     (lambda ()
-       (if (eq major-mode (default-value 'major-mode))
-	   (sh-mode))))
+     ,(lambda ()
+        (if (eq major-mode (default-value 'major-mode))
+            (sh-mode))))
 
-    (ada-mode . ada-header)
+    (ada-mode . ada-skel-initial-string)
 
     (("\\.[1-9]\\'" . "Man page skeleton")
      "Short description: "
@@ -162,8 +164,31 @@ If this contains a %s, that will be replaced by the matching rule."
 .SH AUTHOR
 " (user-full-name)
      '(if (search-backward "&" (line-beginning-position) t)
-	  (replace-match (capitalize (user-login-name)) t t))
+          (replace-match (capitalize (user-login-name)) t t))
      '(end-of-line 1) " <" (progn user-mail-address) ">\n")
+
+    ((,(rx ".dir-locals" (? "-2") ".el") . "Directory Local Variables")
+     nil
+     ";;; Directory Local Variables         -*- no-byte-compile: t; -*-\n"
+     ";;; For more information see (info \"(emacs) Directory Variables\")\n\n"
+     "(("
+     '(setq v1 (let ((modes '("nil")))
+                 (mapatoms (lambda (mode)
+                             (let ((name (symbol-name mode)))
+                               (when (string-match "-mode\\'" name)
+                                 (push name modes)))))
+                 (sort modes 'string<)))
+     (completing-read "Local variables for mode: " v1 nil 'confirm)
+     " . (("
+     (let ((all-variables
+            (apropos-internal ".*"
+                              (lambda (symbol)
+                                (and (boundp symbol)
+                                     (get symbol 'variable-documentation))))))
+       (completing-read "Variable to set: " all-variables))
+     " . "
+     (completing-read "Value to set it to: " nil)
+     "))))\n")
 
     (("\\.el\\'" . "Emacs Lisp header")
      "Short description: "
@@ -173,23 +198,24 @@ If this contains a %s, that will be replaced by the matching rule."
      "
 
 ;; Copyright (C) " (format-time-string "%Y") "  "
- (getenv "ORGANIZATION") | (progn user-full-name) "
+     (getenv "ORGANIZATION") | (progn user-full-name) "
 
 ;; Author: " (user-full-name)
-'(if (search-backward "&" (line-beginning-position) t)
-     (replace-match (capitalize (user-login-name)) t t))
-'(end-of-line 1) " <" (progn user-mail-address) ">
+     '(if (search-backward "&" (line-beginning-position) t)
+          (replace-match (capitalize (user-login-name)) t t))
+     '(end-of-line 1) " <" (progn user-mail-address) ">
 ;; Keywords: "
- '(require 'finder)
- ;;'(setq v1 (apply 'vector (mapcar 'car finder-known-keywords)))
- '(setq v1 (mapcar (lambda (x) (list (symbol-name (car x))))
-		   finder-known-keywords)
-	v2 (mapconcat (lambda (x) (format "%12s:  %s" (car x) (cdr x)))
-	   finder-known-keywords
-	   "\n"))
- ((let ((minibuffer-help-form v2))
-    (completing-read "Keyword, C-h: " v1 nil t))
-    str ", ") & -2 "
+     '(require 'finder)
+     ;;'(setq v1 (apply 'vector (mapcar 'car finder-known-keywords)))
+     '(setq v1 (mapcar (lambda (x) (list (symbol-name (car x))))
+                       finder-known-keywords)
+            v2 (mapconcat (lambda (x) (format "%12s:  %s" (car x) (cdr x)))
+                          finder-known-keywords
+                          "\n"))
+     ((let ((minibuffer-help-form v2))
+        (completing-read "Keyword, C-h: " v1 nil t))
+      str ", ")
+     & -2 "
 
 \;; This program is free software; you can redistribute it and/or modify
 \;; it under the terms of the GNU General Public License as published by
@@ -213,8 +239,8 @@ If this contains a %s, that will be replaced by the matching rule."
 
 
 \(provide '"
-       (file-name-base (buffer-file-name))
-       ")
+     (file-name-base (buffer-file-name))
+     ")
 \;;; " (file-name-nondirectory (buffer-file-name)) " ends here\n")
     (("\\.texi\\(nfo\\)?\\'" . "Texinfo file skeleton")
      "Title: "
@@ -222,13 +248,13 @@ If this contains a %s, that will be replaced by the matching rule."
 @c %**start of header
 @setfilename "
      (file-name-base (buffer-file-name)) ".info\n"
-      "@settitle " str "
+     "@settitle " str "
 @c %**end of header
 @copying\n"
-      (setq short-description (read-string "Short description: "))
-      ".\n\n"
-      "Copyright @copyright{} " (format-time-string "%Y") "  "
-      (getenv "ORGANIZATION") | (progn user-full-name) "
+     (setq short-description (read-string "Short description: "))
+     ".\n\n"
+     "Copyright @copyright{} " (format-time-string "%Y") "  "
+     (getenv "ORGANIZATION") | (progn user-full-name) "
 
 @quotation
 Permission is granted to copy, distribute and/or modify this document
@@ -244,7 +270,7 @@ Foundation Web site at @url{https://www.gnu.org/licenses/fdl.html}.
 @end quotation
 
 The document was typeset with
-@uref{http://www.texinfo.org/, GNU Texinfo}.
+@uref{https://www.gnu.org/software/texinfo/, GNU Texinfo}.
 
 @end copying
 
@@ -295,108 +321,132 @@ The document was typeset with
 @printindex cp
 
 @bye
-
-@c " (file-name-nondirectory (buffer-file-name)) " ends here\n"))
+"))
   "A list specifying text to insert by default into a new file.
-Elements look like (CONDITION DESCRIPTION ACTION) or (CONDITION
-TEMPLATES) where TEMPLATES is a list of elements of
-type (DESCRIPTION ACTION). CONDITION may be a regexp that must
-match the new file's name, or it may be a symbol that must match
-the major mode for this element to apply. DESCRIPTION is a string
-for filling `auto-insert-prompt' and describing the template when
-the user has to choose one.
+Elements look like (CONDITION . ACTION) or ((CONDITION . DESCRIPTION) . ACTION).
+CONDITION may be a regexp that must match the new file's name, or it may be
+a symbol that must match the major mode for this element to apply.
+Only the first matching element is effective.
+Optional DESCRIPTION is a string for filling `auto-insert-prompt'.
+ACTION may be a skeleton to insert (see `skeleton-insert'), an absolute
+file-name or one relative to `auto-insert-directory' or a function to call.
+ACTION may also be a vector containing several successive single actions as
+described above, e.g. [\"header.insert\" date-and-author-update]."
+  :type '(alist :key-type
+                (choice (regexp :tag "Regexp matching file name")
+                        (symbol :tag "Major mode")
+                        (cons :tag "Condition and description"
+                              (choice :tag "Condition"
+                                      (regexp :tag "Regexp matching file name")
+                                      (symbol :tag "Major mode"))
+                              (string :tag "Description")))
+                ;; There's no custom equivalent of "repeat" for vectors.
+                :value-type (choice file function
+                                    (sexp :tag "Skeleton or vector")))
+  :version "27.1")
 
- ACTION may be an absolute
-file-name or one relative to `auto-insert-directory' or a form to evaluate."
-  :type 'sexp
-  :group 'auto-insert)
 
 ;; Establish a default value for auto-insert-directory
 (defcustom auto-insert-directory (expand-file-name "insert" user-emacs-directory)
-  "Directory from which auto-inserted files are taken.
-The value must be an absolute directory name;
-thus, on a GNU or Unix system, it must end in a slash."
-  :type 'directory
-  :group 'auto-insert)
+  "Directory from which auto-inserted files are taken."
+  :type 'directory)
 
-(defun auto-insert-get-templates ()
-  (let ((templates auto-insert-alist) condition desc action filtered-templates)
-    (while templates
-      (if (atom (car (car templates)))
-          (setq condition (car (car templates))
-                action (cdr (car templates))
-                desc (if (stringp condition) condition (symbol-name condition)))
-        (if (consp (car (car templates)))
-            (setq condition (car (car (car templates)))
-                  action (cdr (car templates))
-                  desc (cdr (car (car templates))))))
-
-      (if (or (and (symbolp condition)
-                   (eq major-mode condition))
-              (and (stringp condition)
-                   buffer-file-name
-                   (string-match condition buffer-file-name)))
-          (setq filtered-templates
-                (cons (cons desc action) filtered-templates)))
-      (setq templates (cdr templates)))
-    (nreverse filtered-templates)))
 
 ;;;###autoload
 (defun auto-insert ()
   "Insert default contents into new files if variable `auto-insert' is non-nil.
 Matches the visited file name against the elements of `auto-insert-alist'."
   (interactive)
-  (when (and (not buffer-read-only)
-             (or ; (not (called-interactively-p 'interactive))
-                 (eq this-command 'auto-insert)
-                 (and auto-insert (zerop (buffer-size)))))
-    (let ((templates (auto-insert-get-templates)) action desc)
-      ;; Select action
-        (if (cdr templates)
-            (if (memq auto-insert-query '(multiple always))
-                (setq desc (completing-read
-                            "Template to insert: "
-                            (mapcar #'car templates))
-                      action (cdr (assoc desc templates))))
-          (setq desc (car templates))
-          (when (or (not (eq auto-insert-query 'always))
-                    (y-or-n-p (format auto-insert-prompt desc)))
-            (setq action (cdr (assoc desc templates)))))
+  (and (not buffer-read-only)
+       (or (eq this-command 'auto-insert)
+           (and auto-insert
+                (bobp) (eobp)))
+       (let* ((case-fold-search nil)
+              (desc nil)
+              ;; Find all matching alist entries.
+              (actions
+               (delq nil
+                     (seq-map
+                      (pcase-lambda (`(,cond . ,action))
+                        (if (atom cond)
+                            (setq desc cond)
+                          (setq desc (cdr cond)
+                                cond (car cond)))
+                        (when (if (symbolp cond)
+                                  (derived-mode-p cond)
+                                (and buffer-file-name
+                                     (string-match cond buffer-file-name)))
+                          (cons desc action)))
+                      auto-insert-alist))))
+         (goto-char 1)
+         ;; Select action
+         (if (cdr actions)
+             (setq desc (completing-read
+                         "Template to insert: "
+                         (mapcar #'car actions))
+                   action (cdr (assoc desc actions)))
+           (setq desc (car (car actions)))
+           (when (or (not auto-insert-query)
+                     (if (eq auto-insert-query 'function)
+                         (eq this-command 'auto-insert))
+                     (y-or-n-p (format auto-insert-prompt desc)))
+             (setq action (cdr (assoc desc actions)))))
 
-        (if (and (stringp action)
-                 (not (file-readable-p (expand-file-name
-                                        action auto-insert-directory))))
-            (setq action nil))
+         (if (and (stringp action)
+                  (not (file-readable-p (expand-file-name
+                                         action auto-insert-directory))))
+             (setq action nil))
 
-        (when action
-          (mapc
-           (lambda (action)
-             (if (stringp action)
-                 (if (file-readable-p
-                      (setq action (expand-file-name
-                                    action auto-insert-directory)))
-                     (insert-file-contents action))
-               (save-window-excursion
-                 ;; make buffer visible before skeleton or function
-                 ;; which might ask the user for something
-                 (switch-to-buffer (current-buffer))
-                 (if (functionp action)
-                     (funcall action)
-                   (skeleton-insert action)))))
-           (if (vectorp action)
-               action
-             (vector action)))
+         (when action
+           (mapc
+            (lambda (action)
+              (if (stringp action)
+                  (if (file-readable-p
+                       (setq action (expand-file-name
+                                     action auto-insert-directory)))
+                      (insert-file-contents action))
+                (save-window-excursion
+                  ;; make buffer visible before skeleton or function
+                  ;; which might ask the user for something
+                  (switch-to-buffer (current-buffer))
+                  (if (and (consp action)
+                           (not (functionp action)))
+                      (skeleton-insert action)
+                    (funcall action)))))
+            (if (vectorp action)
+                action
+              (vector action)))
+           (and (buffer-modified-p)
+                (not (eq this-command 'auto-insert))
+                (set-buffer-modified-p (eq auto-insert t))))))
+  ;; Return nil so that it could be used in
+  ;; `find-file-not-found-functions', though that's probably inadvisable.
+  nil)
 
-          (and (buffer-modified-p)
-               (not (eq this-command 'auto-insert))
-               (set-buffer-modified-p (eq auto-insert t)))))))
+
+;;;###autoload
+(defun define-auto-insert (condition action &optional after)
+  "Associate CONDITION with (additional) ACTION in `auto-insert-alist'.
+Optional AFTER means to insert action after all existing actions for CONDITION,
+or if CONDITION had no actions, after all other CONDITIONs."
+  (declare (indent defun))
+  (let ((elt (assoc condition auto-insert-alist)))
+    (if elt
+	(setcdr elt
+		(if (vectorp (cdr elt))
+		    (vconcat (if after (cdr elt))
+			     (if (vectorp action) action (vector action))
+			     (if after () (cdr elt)))
+		  (if after
+		      (vector (cdr elt) action)
+		    (vector action (cdr elt)))))
+      (if after
+	  (nconc auto-insert-alist (list (cons condition action)))
+        (push (cons condition action) auto-insert-alist)))))
 
 ;;;###autoload
 (define-minor-mode auto-insert-mode
   "Toggle Auto-insert mode, a global minor mode.
-With a prefix argument ARG, enable Auto-insert mode if ARG is
-positive, and disable it otherwise.  If called from Lisp, enable
-the mode if ARG is omitted or nil.
 
 When Auto-insert mode is enabled, when new files are created you can
 insert a template for the file depending on the mode of the buffer."
